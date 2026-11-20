@@ -136,6 +136,23 @@ object TreeLayout {
         }
         fun siblingRank(id: String): Double = data.persons[id]?.birthOrder ?: Double.MAX_VALUE
 
+        // Distance from the reference person along parent/child links only (marriages excluded). When both
+        // spouses of a cluster have parents (e.g. cousins who married), the nearer one is the cluster's
+        // "home": its family decides where the cluster sits, so a sibling group is never split by a
+        // spouse's family.
+        val dist = HashMap<String, Int>()
+        run {
+            val start = data.rootId?.takeIf { it in data.persons } ?: ids.first()
+            val q = ArrayDeque<String>().apply { add(start) }; dist[start] = 0
+            while (q.isNotEmpty()) {
+                val n = q.removeFirst()
+                val nb = idx.parentLinks(n).map { it.parentId } + idx.childLinks(n).map { it.childId }
+                for (o in nb) if (o in data.persons && o !in dist) { dist[o] = dist.getValue(n) + 1; q.add(o) }
+            }
+        }
+        fun home(c: Cluster): String? =
+            c.members.filter { parentAnchor(it) != null }.minByOrNull { dist[it] ?: Int.MAX_VALUE }
+
         fun place(list: List<Cluster>, desired: List<Float?>) {
             if (list.isEmpty()) return
             // isotonic regression on centres with minimum spacing
@@ -158,8 +175,8 @@ object TreeLayout {
         }
 
         fun clusterDesiredDown(c: Cluster): Float? {
-            val v = c.members.mapNotNull { m -> parentAnchor(m)?.let { it - c.offset(m) } }
-            return if (v.isEmpty()) null else v.average().toFloat()
+            val h = home(c) ?: return null
+            return parentAnchor(h)!! - c.offset(h)
         }
         fun clusterDesiredUp(c: Cluster): Float? {
             val v = c.members.mapNotNull { m -> childAnchor(m)?.let { it - c.offset(m) } }
@@ -171,11 +188,12 @@ object TreeLayout {
             // downward sweep: order by parents, then birth order
             for (g in keys.drop(1)) {
                 val list = rowList.getValue(g)
+                // Order by the home member's parents (rounded, so siblings tie exactly), then birth order.
                 val sortKey = list.associateWith { c ->
-                    val d = clusterDesiredDown(c)
-                    d ?: c.x
+                    val h = home(c)
+                    if (h != null) Math.round(parentAnchor(h)!!).toFloat() else c.x
                 }
-                list.sortWith(compareBy<Cluster> { sortKey.getValue(it) }.thenBy { c -> c.members.minOf { siblingRank(it) } }.thenBy { it.x })
+                list.sortWith(compareBy<Cluster> { sortKey.getValue(it) }.thenBy { c -> siblingRank(home(c) ?: c.members.first()) }.thenBy { it.x })
                 place(list, list.map { clusterDesiredDown(it) })
             }
             // upward sweep: parents move above their children

@@ -39,6 +39,7 @@ fun PersonSheet(vm: FamilyViewModel, personId: String, onAction: (SheetAction) -
     val rootName = data.root?.name ?: "the reference person"
     val idx = data.index
     fun nm(id: String) = data.persons[id]?.name ?: "?"
+    val siblingOrder = FamilyEditor.orderedSiblings(data, personId)
 
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false), containerColor = Pencil.Paper) {
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 18.dp).padding(bottom = 32.dp)) {
@@ -58,6 +59,17 @@ fun PersonSheet(vm: FamilyViewModel, personId: String, onAction: (SheetAction) -
                 PButton("Add child", { onAction(SheetAction.Wizard(RelKind.CHILD)) })
                 PButton("Add sibling", { onAction(SheetAction.Wizard(RelKind.SIBLING)) })
                 PButton("Add parent", { onAction(SheetAction.Wizard(RelKind.PARENT)) })
+                if (siblingOrder.size > 1) {
+                    PButton("Reorder siblings", { onAction(SheetAction.Reorder) })
+                    val pos = siblingOrder.indexOfFirst { it.id == p.id }
+                    fun move(by: Int, msg: String) {
+                        val l = siblingOrder.map { it.id }.toMutableList()
+                        val a = l[pos]; l[pos] = l[pos + by]; l[pos + by] = a
+                        vm.edit(msg, undoable = true) { FamilyEditor.reorderSiblings(it, l) }
+                    }
+                    if (pos > 0) PButton("Move older (↑)", { move(-1, "${p.name} is now older than ${siblingOrder[pos - 1].name}") })
+                    if (pos in 0 until siblingOrder.size - 1) PButton("Move younger (↓)", { move(1, "${p.name} is now younger than ${siblingOrder[pos + 1].name}") })
+                }
                 PButton("Link existing person", { onAction(SheetAction.Wizard(null, existingFirst = true)) })
                 PButton("Edit profile", { onAction(SheetAction.Edit) })
                 PButton(if (p.deceased) "Mark living" else "Mark deceased", { onAction(if (p.deceased) SheetAction.Living else SheetAction.Deceased) })
@@ -107,7 +119,7 @@ fun PersonSheet(vm: FamilyViewModel, personId: String, onAction: (SheetAction) -
             Text("Parents", style = MaterialTheme.typography.labelLarge)
             if (parentLinks.isEmpty()) Muted("None recorded.")
             parentLinks.forEach { l -> Text("${nm(l.parentId)}  ·  ${lineLabel(l.type)}", Modifier.clickable { onAction(SheetAction.GoTo(l.parentId)) }.padding(vertical = 3.dp)) }
-            val sibs = FamilyEditor.orderedSiblings(data, p.id).filter { it.id != p.id }
+            val sibs = siblingOrder.filter { it.id != p.id }
             Text("Brothers and sisters (eldest first)", Modifier.padding(top = 10.dp), style = MaterialTheme.typography.labelLarge)
             if (sibs.isEmpty()) Muted("None recorded.")
             sibs.forEach { s ->
