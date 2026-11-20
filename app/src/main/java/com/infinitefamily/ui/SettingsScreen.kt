@@ -167,49 +167,146 @@ fun TerminologyScreen(vm: FamilyViewModel, onClose: () -> Unit) {
     val overrides by vm.overrides.collectAsState()
     val term by vm.terminology.collectAsState()
     var q by remember { mutableStateOf("") }
-    var editing by remember { mutableStateOf<TermEntry?>(null) }
-    val entries = remember(q) { DefaultTerminology.entries.values.filter { q.isBlank() || it.relationEn.contains(q, true) || it.code.contains(q, true) } }
+    var editing by remember { mutableStateOf<String?>(null) }
+    var adding by remember { mutableStateOf(false) }
+    // Built-in relationships plus any custom ones the family added.
+    val codes = remember(overrides) {
+        DefaultTerminology.entries.keys.toList() + overrides.map { it.code }.distinct().filter { it !in DefaultTerminology.entries }
+    }
+    val shown = remember(q, codes, term) {
+        codes.filter { c -> q.isBlank() || c.contains(q, true) || term.resolve(c).relationEn.contains(q, true) }
+    }
     Dialog(onClose, DialogProperties(usePlatformDefaultWidth = false)) {
         Surface(Modifier.fillMaxSize()) {
             Column(Modifier.fillMaxSize().statusBarsPadding()) {
                 Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                     TextButton(onClose) { Text("Close") }
-                    Text("Terminology", style = MaterialTheme.typography.titleMedium)
+                    Text("Terminology", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+                    Button({ adding = true }) { Text("+ Add new term") }
                 }
-                Muted("Defaults are common usage, not universal. Tap a relationship to set your family's own words. Blank fields use the default.", Modifier.padding(horizontal = 16.dp))
+                Muted("Defaults are common usage, not universal. Tap a relationship to set your family's own words, or add a new one. Blank fields use the default.", Modifier.padding(horizontal = 16.dp))
                 OutlinedTextField(q, { q = it }, Modifier.fillMaxWidth().padding(16.dp), singleLine = true, label = { Text("Search relationships") })
                 LazyColumn(Modifier.weight(1f).padding(horizontal = 16.dp)) {
-                    items(entries, key = { it.code }) { e ->
-                        val r = term.resolve(e.code)
-                        val custom = overrides.any { it.code == e.code }
-                        Column(Modifier.fillMaxWidth().clickable { editing = e }.padding(vertical = 8.dp)) {
-                            Text(e.relationEn + if (custom) "  ✎" else "", style = MaterialTheme.typography.titleSmall)
+                    items(shown, key = { it }) { code ->
+                        val r = term.resolve(code)
+                        val custom = overrides.any { it.code == code }
+                        Column(Modifier.fillMaxWidth().clickable { editing = code }.padding(vertical = 8.dp)) {
+                            Text(r.relationEn + if (custom) "  ✎" else "", style = MaterialTheme.typography.titleSmall)
                             Muted("Tamil: ${r.ta.joinToString(" / ") { it.text }.ifBlank { "–" }}    Malayalam: ${r.ml.joinToString(" / ") { it.text }.ifBlank { "–" }}")
                         }
                         HorizontalDivider(color = Pencil.Faint)
                     }
+                    if (shown.isEmpty()) item { Muted("No match. Use “+ Add new term” to create it.", Modifier.padding(vertical = 12.dp)) }
                 }
             }
         }
     }
-    editing?.let { e ->
-        val cur = { l: Language -> overrides.firstOrNull { it.code == e.code && it.language == l }?.text ?: "" }
-        var en by remember(e) { mutableStateOf(cur(Language.EN)) }
-        var ta by remember(e) { mutableStateOf(cur(Language.TA)) }
-        var ml by remember(e) { mutableStateOf(cur(Language.ML)) }
+    if (adding) AddTermDialog(
+        vm, term, onDismiss = { adding = false },
+        onPick = { code -> adding = false; editing = code },
+    )
+    editing?.let { code ->
+        val r = term.resolve(code)
+        val cur = { l: Language -> overrides.firstOrNull { it.code == code && it.language == l }?.text ?: "" }
+        var en by remember(code) { mutableStateOf(cur(Language.EN)) }
+        var ta by remember(code) { mutableStateOf(cur(Language.TA)) }
+        var ml by remember(code) { mutableStateOf(cur(Language.ML)) }
         AlertDialog(
             onDismissRequest = { editing = null },
-            title = { Text(e.relationEn) },
+            title = { Text(r.relationEn) },
             text = {
                 Column(Modifier.verticalScroll(rememberScrollState())) {
-                    OutlinedTextField(en, { en = it }, Modifier.fillMaxWidth(), singleLine = true, label = { Text("English term") }, placeholder = { Text(e.addressEn) })
-                    OutlinedTextField(ta, { ta = it }, Modifier.fillMaxWidth().padding(top = 8.dp), singleLine = true, label = { Text("Tamil term") }, placeholder = { Text(e.ta.joinToString(" / ") { it.text }) })
-                    OutlinedTextField(ml, { ml = it }, Modifier.fillMaxWidth().padding(top = 8.dp), singleLine = true, label = { Text("Malayalam term") }, placeholder = { Text(e.ml.joinToString(" / ") { it.text }) })
+                    OutlinedTextField(en, { en = it }, Modifier.fillMaxWidth(), singleLine = true, label = { Text("English term") }, placeholder = { Text(r.addressEn) })
+                    OutlinedTextField(ta, { ta = it }, Modifier.fillMaxWidth().padding(top = 8.dp), singleLine = true, label = { Text("Tamil term") }, placeholder = { Text(r.ta.joinToString(" / ") { it.text }) })
+                    OutlinedTextField(ml, { ml = it }, Modifier.fillMaxWidth().padding(top = 8.dp), singleLine = true, label = { Text("Malayalam term") }, placeholder = { Text(r.ml.joinToString(" / ") { it.text }) })
                     Muted("Applies when ${vm.data.value.root?.name ?: "you"} or anyone else addresses this relationship, and is included in backups.")
                 }
             },
-            confirmButton = { TextButton({ vm.setOverride(e.code, Language.EN, en); vm.setOverride(e.code, Language.TA, ta); vm.setOverride(e.code, Language.ML, ml); editing = null }) { Text("Save") } },
-            dismissButton = { TextButton({ vm.setOverride(e.code, Language.EN, ""); vm.setOverride(e.code, Language.TA, ""); vm.setOverride(e.code, Language.ML, ""); editing = null }) { Text("Reset to default") } },
+            confirmButton = { TextButton({ vm.setOverride(code, Language.EN, en); vm.setOverride(code, Language.TA, ta); vm.setOverride(code, Language.ML, ml); editing = null }) { Text("Save") } },
+            dismissButton = { TextButton({ vm.setOverride(code, Language.EN, ""); vm.setOverride(code, Language.TA, ""); vm.setOverride(code, Language.ML, ""); editing = null }) { Text("Reset to default") } },
         )
+    }
+}
+
+/**
+ * Quick way to add a term: pick a gap found in the family tree, or build a relationship path step by step
+ * ("Father's" > elder "Sister") with a live English name, then type the words.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun AddTermDialog(vm: FamilyViewModel, term: Terminology, onDismiss: () -> Unit, onPick: (String) -> Unit) {
+    val engine by vm.engine.collectAsState()
+    val suggestions = remember(engine, term) { TermSuggestions.fromFamily(engine, term) }
+    var steps by remember { mutableStateOf(listOf<CodeStep>()) }
+    var bond by remember { mutableStateOf<Char?>(null) }
+    var age by remember { mutableStateOf<Char?>(null) }
+    var targetAge by remember { mutableStateOf<Char?>(null) }
+    val code = TermSuggestions.buildCode(steps, targetAge)
+    Dialog(onDismiss, DialogProperties(usePlatformDefaultWidth = false)) {
+        Surface(Modifier.fillMaxSize()) {
+            Column(Modifier.fillMaxSize().statusBarsPadding().verticalScroll(rememberScrollState()).padding(16.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    TextButton(onDismiss) { Text("Cancel") }
+                    Text("Add new term", style = MaterialTheme.typography.titleMedium)
+                }
+
+                SectionTitle("1. Quick pick from your family")
+                if (suggestions.isEmpty()) Muted("Every relationship in your tree already has Tamil and Malayalam terms. Build a different one below.")
+                else {
+                    Muted("These relationships exist in your tree but have no complete term yet. Tap one to fill it in.")
+                    suggestions.forEach { sg ->
+                        val missing = listOfNotNull("Tamil".takeIf { sg.missingTa }, "Malayalam".takeIf { sg.missingMl }).joinToString(" + ")
+                        Column(Modifier.fillMaxWidth().clickable { onPick(sg.code) }.padding(vertical = 8.dp)) {
+                            Text(sg.relationEn, style = MaterialTheme.typography.titleSmall)
+                            Muted("e.g. ${sg.example}  ·  missing: $missing")
+                        }
+                        HorizontalDivider(color = Pencil.Faint)
+                    }
+                }
+
+                SectionTitle("2. Or build a relationship")
+                Muted("Read it as “my ...”. Add one link at a time, for example Father → elder Sister.")
+                Text(
+                    if (steps.isEmpty()) "(nothing yet)" else EnglishNamer.describe(code),
+                    style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(vertical = 8.dp),
+                )
+                Text("Link type (optional)", style = MaterialTheme.typography.labelMedium)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    FilterChip(bond == null, { bond = null }, { Text("Normal") })
+                    TermSuggestions.bonds.forEach { (c, n) -> FilterChip(bond == c, { bond = if (bond == c) null else c }, { Text(n) }) }
+                }
+                Text("Older or younger (for brothers / sisters)", style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(top = 8.dp))
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    FilterChip(age == null, { age = null }, { Text("Any") })
+                    FilterChip(age == 'e', { age = if (age == 'e') null else 'e' }, { Text("Elder") })
+                    FilterChip(age == 'y', { age = if (age == 'y') null else 'y' }, { Text("Younger") })
+                }
+                Text("Add link", style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(top = 8.dp))
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    TermSuggestions.letters.forEach { (c, n) ->
+                        AssistChip({ steps = steps + CodeStep(c, bond, age); bond = null; age = null }, { Text("+ $n") })
+                    }
+                }
+                Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TextButton({ steps = steps.dropLast(1) }, enabled = steps.isNotEmpty()) { Text("Remove last") }
+                    TextButton({ steps = emptyList(); targetAge = null }, enabled = steps.isNotEmpty()) { Text("Clear") }
+                }
+                if (steps.isNotEmpty()) {
+                    Text("Is this person older or younger than you? (cousins)", style = MaterialTheme.typography.labelMedium)
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        FilterChip(targetAge == null, { targetAge = null }, { Text("Don't say") })
+                        FilterChip(targetAge == 'e', { targetAge = 'e' }, { Text("Older than me") })
+                        FilterChip(targetAge == 'y', { targetAge = 'y' }, { Text("Younger than me") })
+                    }
+                    val r = term.resolve(code)
+                    Muted(
+                        "Now: Tamil ${r.ta.joinToString(" / ") { it.text }.ifBlank { "not set" }} · Malayalam ${r.ml.joinToString(" / ") { it.text }.ifBlank { "not set" }}",
+                        Modifier.padding(top = 8.dp),
+                    )
+                    PButton("Next: enter the words", { onPick(code) }, Modifier.padding(top = 12.dp))
+                }
+                Spacer(Modifier.height(40.dp))
+            }
+        }
     }
 }

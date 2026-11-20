@@ -22,8 +22,7 @@ private data class Sample(val label: String, val color: Color, val width: Float,
 
 /** Small, collapsible key to the line styles. Collapsed by default so the sheet stays clean. */
 @Composable
-fun Legend(modifier: Modifier = Modifier) {
-    var open by remember { mutableStateOf(false) }
+fun Legend(open: Boolean, onToggle: () -> Unit, modifier: Modifier = Modifier) {
     val dashed = PathEffect.dashPathEffect(floatArrayOf(10f, 6f))
     val dotted = PathEffect.dashPathEffect(floatArrayOf(2f, 7f))
     val items = listOf(
@@ -39,7 +38,7 @@ fun Legend(modifier: Modifier = Modifier) {
         modifier
             .background(Pencil.Paper.copy(alpha = 0.94f))
             .border(1.dp, Pencil.LightGrey)
-            .clickable { open = !open }
+            .clickable { onToggle() }
             .padding(horizontal = 10.dp, vertical = 6.dp),
     ) {
         Text(if (open) "Legend  –" else "Legend  +", style = TextStyle(fontFamily = HandFamily, fontSize = 14.sp, color = Pencil.Grey))

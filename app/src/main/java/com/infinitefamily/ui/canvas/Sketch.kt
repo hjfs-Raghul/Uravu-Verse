@@ -3,60 +3,28 @@ package com.infinitefamily.ui.canvas
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Path
+import com.infinitefamily.domain.Garment
+import com.infinitefamily.domain.Hair
+import com.infinitefamily.domain.Look
 import com.infinitefamily.domain.StickerCategory
+import com.infinitefamily.domain.StickerLooks
+import com.infinitefamily.domain.StickerStage
 import kotlin.math.hypot
 import kotlin.random.Random
 
 /** One pencil stroke (or a small filled dot) of an illustration. */
 class Pen(val path: Path, val width: Float, val alpha: Float, val fill: Boolean = false)
 
-private enum class Hair { SHORT, SPIKY, PARTED, CURLY, BUN, LONG, PONY, PIGTAILS, BRAIDS, WISPS, BALD, TUFT, CAP }
-private enum class Garment { SHIRT, TEE, KURTA, SAREE, DRESS, SWADDLE, SHAWL }
-private data class Look(
-    val hair: Hair, val garment: Garment, val glasses: Boolean = false, val moustache: Boolean = false,
-    val beard: Boolean = false, val bindi: Boolean = false, val wrinkles: Boolean = false,
-)
-
 /**
  * Procedural pencil-sketch people. Several distinct looks per category so siblings and cousins do not
  * all look alike. Coordinates: x -60..60, y -55..55 (the frame region); the head sits near the top.
  */
 object Sketches {
-    private val looks: Map<StickerCategory, List<Look>> = mapOf(
-        StickerCategory.INFANT to listOf(Look(Hair.TUFT, Garment.SWADDLE), Look(Hair.BALD, Garment.SWADDLE), Look(Hair.CURLY, Garment.TEE)),
-        StickerCategory.BOY to listOf(
-            Look(Hair.SHORT, Garment.TEE), Look(Hair.SPIKY, Garment.TEE), Look(Hair.PARTED, Garment.SHIRT),
-            Look(Hair.CURLY, Garment.TEE), Look(Hair.CAP, Garment.TEE, glasses = true), Look(Hair.SHORT, Garment.SHIRT, glasses = true)),
-        StickerCategory.GIRL to listOf(
-            Look(Hair.PIGTAILS, Garment.DRESS), Look(Hair.PONY, Garment.TEE), Look(Hair.BRAIDS, Garment.DRESS),
-            Look(Hair.LONG, Garment.DRESS, bindi = true), Look(Hair.BUN, Garment.TEE), Look(Hair.CURLY, Garment.DRESS)),
-        StickerCategory.YOUNG_MAN to listOf(
-            Look(Hair.SHORT, Garment.SHIRT), Look(Hair.PARTED, Garment.SHIRT, glasses = true),
-            Look(Hair.SPIKY, Garment.TEE, moustache = true), Look(Hair.CURLY, Garment.KURTA, beard = true)),
-        StickerCategory.YOUNG_WOMAN to listOf(
-            Look(Hair.LONG, Garment.KURTA, bindi = true), Look(Hair.PONY, Garment.KURTA),
-            Look(Hair.BUN, Garment.SAREE, glasses = true, bindi = true), Look(Hair.BRAIDS, Garment.SAREE, bindi = true)),
-        StickerCategory.MIDDLE_MAN to listOf(
-            Look(Hair.PARTED, Garment.SHIRT, moustache = true), Look(Hair.SHORT, Garment.SHIRT, glasses = true),
-            Look(Hair.BALD, Garment.KURTA, moustache = true)),
-        StickerCategory.MIDDLE_WOMAN to listOf(
-            Look(Hair.BUN, Garment.SAREE, bindi = true), Look(Hair.LONG, Garment.SAREE, bindi = true, wrinkles = true),
-            Look(Hair.PONY, Garment.KURTA, glasses = true)),
-        StickerCategory.ELDER_MAN to listOf(
-            Look(Hair.BALD, Garment.SHAWL, moustache = true, glasses = true, wrinkles = true),
-            Look(Hair.TUFT, Garment.SHAWL, beard = true, wrinkles = true),
-            Look(Hair.SHORT, Garment.SHIRT, moustache = true, wrinkles = true)),
-        StickerCategory.ELDER_WOMAN to listOf(
-            Look(Hair.WISPS, Garment.SAREE, bindi = true, wrinkles = true),
-            Look(Hair.WISPS, Garment.SAREE, glasses = true, wrinkles = true),
-            Look(Hair.BUN, Garment.SHAWL, bindi = true, wrinkles = true)),
-    )
-
     private val cache = HashMap<String, List<Pen>>()
 
     fun pens(category: StickerCategory, variant: Int): List<Pen> {
         val idx = Math.floorMod(variant, category.variants)
-        return cache.getOrPut("${category.id}:$idx") { build(category, looks.getValue(category)[idx], category.ordinal * 97 + idx * 13 + 5) }
+        return cache.getOrPut("${category.id}:$idx") { build(category, StickerLooks.forCategory(category)[idx], category.ordinal * 97 + idx * 13 + 5) }
     }
 
     private class Sk(seed: Int) {
@@ -90,14 +58,22 @@ object Sketches {
 
     private fun build(cat: StickerCategory, look: Look, seed: Int): List<Pen> {
         val s = Sk(seed)
-        val infant = cat == StickerCategory.INFANT
-        val child = cat == StickerCategory.BOY || cat == StickerCategory.GIRL
-        val r = when { infant -> 24f; child -> 20f; else -> 17f }
-        val hy = when { infant -> -4f; child -> -8f; else -> -13f }
-        val female = cat in listOf(StickerCategory.GIRL, StickerCategory.YOUNG_WOMAN, StickerCategory.MIDDLE_WOMAN, StickerCategory.ELDER_WOMAN)
+        val st = cat.stage
+        val infant = st == StickerStage.BABY
+        val female = cat.female
+        val elder = st == StickerStage.SENIOR || st == StickerStage.OLD
+        val r = when (st) { StickerStage.BABY -> 24f; StickerStage.KID -> 21f; StickerStage.BOY_GIRL -> 20f; StickerStage.TEEN -> 18.5f
+            StickerStage.OLD -> 16.5f; else -> 17f }
+        val hy = when (st) { StickerStage.BABY -> -4f; StickerStage.KID -> -7f; StickerStage.BOY_GIRL -> -9f; StickerStage.TEEN -> -11f; else -> -13f }
         val sh = hy + r + 9f                     // shoulder line
-        val bw = when { infant -> 24f; child -> 32f; female -> 34f; else -> 42f }
-        val elder = cat == StickerCategory.ELDER_MAN || cat == StickerCategory.ELDER_WOMAN
+        val bw = when (st) {
+            StickerStage.BABY -> 24f; StickerStage.KID -> 27f; StickerStage.BOY_GIRL -> 31f
+            StickerStage.TEEN -> if (female) 32f else 36f
+            StickerStage.OLD -> if (female) 31f else 38f
+            StickerStage.FAMILY -> if (female) 36f else 44f
+            else -> if (female) 34f else 42f
+        }
+        val acc = look.acc
 
         // body -----------------------------------------------------------------
         s.line(-5f, hy + r - 1, -5.5f, sh, 1.8f); s.line(5f, hy + r - 1, 5.5f, sh, 1.8f)             // neck
@@ -126,6 +102,19 @@ object Sketches {
                 s.curve(-bw, sh + 6, 0f, sh + 22f, bw, sh + 6, 2f)
                 s.line(-bw + 4, sh + 20, bw - 6, sh + 40, 1.5f, 0.7f); s.line(bw - 4, sh + 18, -bw + 8, sh + 42, 1.5f, 0.7f)
             }
+            Garment.HOODIE -> {
+                s.curve(-14f, sh - 1, 0f, sh + 14f, 14f, sh - 1, 2f); s.curve(-14f, sh - 1, -16f, sh - 6f, -9f, sh - 4f, 1.4f, 0.7f)
+                s.curve(14f, sh - 1, 16f, sh - 6f, 9f, sh - 4f, 1.4f, 0.7f); s.line(-3f, sh + 8f, -3f, sh + 22f, 1.2f, 0.7f); s.line(3f, sh + 8f, 3f, sh + 22f, 1.2f, 0.7f)
+                s.curve(-bw + 8, 46f, 0f, 38f, bw - 8, 46f, 1.5f, 0.7f)
+            }
+            Garment.SWEATER -> {
+                s.curve(-8f, sh, 0f, sh + 8f, 8f, sh, 1.8f); s.line(-bw + 2, sh + 22, bw - 2, sh + 22, 1.2f, 0.6f)
+                s.line(-bw + 3, sh + 32, bw - 3, sh + 32, 1.2f, 0.6f); s.line(-bw + 4, sh + 42, bw - 4, sh + 42, 1.2f, 0.6f)
+            }
+            Garment.SUIT -> {
+                s.line(-8f, sh, -3f, sh + 18f, 1.9f); s.line(8f, sh, 3f, sh + 18f, 1.9f); s.line(-3f, sh + 18f, 0f, 60f, 1.5f, 0.7f)
+                s.line(0f, sh + 4f, 0f, sh + 30f, 2.4f, 0.9f); s.line(-3f, sh + 4f, 3f, sh + 4f, 1.5f)
+            }
             Garment.SHAWL -> {
                 s.line(-bw + 2, sh + 12, bw - 8, sh + 40, 2.4f); s.line(-bw + 10, sh + 8, bw - 2, sh + 36, 1.5f, 0.6f)
                 s.line(-8f, sh, -2f, sh + 12f, 1.8f); s.line(8f, sh, 2f, sh + 12f, 1.8f)
@@ -137,15 +126,17 @@ object Sketches {
         if (!infant || true) { s.dot(-r * 0.36f, hy - r * 0.05f, 1.6f); s.dot(r * 0.36f, hy - r * 0.05f, 1.6f) }  // eyes
         s.line(0f, hy + r * 0.02f, r * 0.06f, hy + r * 0.3f, 1.3f, 0.7f)                                          // nose
         s.curve(-r * 0.3f, hy + r * 0.52f, 0f, hy + r * 0.75f, r * 0.3f, hy + r * 0.52f, 1.5f)                    // smile
-        if (look.glasses) {
+        if (acc.glasses) {
             s.oval(-r * 0.38f, hy - r * 0.05f, r * 0.27f, r * 0.24f, 1.5f); s.oval(r * 0.38f, hy - r * 0.05f, r * 0.27f, r * 0.24f, 1.5f)
             s.line(-r * 0.11f, hy - r * 0.07f, r * 0.11f, hy - r * 0.07f, 1.3f)
         }
-        if (look.moustache) { s.curve(-r * 0.4f, hy + r * 0.42f, -r * 0.15f, hy + r * 0.28f, 0f, hy + r * 0.38f, 1.8f); s.curve(0f, hy + r * 0.38f, r * 0.15f, hy + r * 0.28f, r * 0.4f, hy + r * 0.42f, 1.8f) }
-        if (look.beard) { s.curve(-r * 0.8f, hy + r * 0.2f, 0f, hy + r * 1.6f, r * 0.8f, hy + r * 0.2f, 1.6f); s.hatch(-r * 0.4f, hy + r * 0.95f, -r * 0.2f, hy + r * 1.25f, 5, r * 0.2f, 0f, 0.5f) }
-        if (look.bindi) s.dot(0f, hy - r * 0.45f, 1.7f)
-        if (look.wrinkles) { s.line(-r * 0.7f, hy - r * 0.5f, -r * 0.25f, hy - r * 0.55f, 1f, 0.45f); s.line(r * 0.25f, hy - r * 0.55f, r * 0.7f, hy - r * 0.5f, 1f, 0.45f); s.line(-r * 0.55f, hy + r * 0.3f, -r * 0.4f, hy + r * 0.45f, 1f, 0.4f) }
-        if (elder && !look.glasses) { s.line(-r * 0.7f, hy - r * 0.18f, -r * 0.5f, hy - r * 0.12f, 1f, 0.4f) }
+        if (acc.moustache) { s.curve(-r * 0.4f, hy + r * 0.42f, -r * 0.15f, hy + r * 0.28f, 0f, hy + r * 0.38f, 1.8f); s.curve(0f, hy + r * 0.38f, r * 0.15f, hy + r * 0.28f, r * 0.4f, hy + r * 0.42f, 1.8f) }
+        if (acc.beard) { s.curve(-r * 0.8f, hy + r * 0.2f, 0f, hy + r * 1.6f, r * 0.8f, hy + r * 0.2f, 1.6f); s.hatch(-r * 0.4f, hy + r * 0.95f, -r * 0.2f, hy + r * 1.25f, 5, r * 0.2f, 0f, 0.5f) }
+        if (acc.bindi) s.dot(0f, hy - r * 0.45f, 1.7f)
+        if (acc.wrinkles) { s.line(-r * 0.7f, hy - r * 0.5f, -r * 0.25f, hy - r * 0.55f, 1f, 0.45f); s.line(r * 0.25f, hy - r * 0.55f, r * 0.7f, hy - r * 0.5f, 1f, 0.45f); s.line(-r * 0.55f, hy + r * 0.3f, -r * 0.4f, hy + r * 0.45f, 1f, 0.4f) }
+        if (acc.freckles) { for (k in -1..1) { s.dot(-r * 0.5f + k * 3f, hy + r * 0.3f + (k and 1) * 2f, 0.8f, 0.6f); s.dot(r * 0.5f + k * 3f, hy + r * 0.3f + (k and 1) * 2f, 0.8f, 0.6f) } }
+        if (acc.earrings) { s.dot(-r * 0.92f, hy + 9f, 1.9f); s.dot(r * 0.92f, hy + 9f, 1.9f) }
+        if (elder && !acc.glasses) { s.line(-r * 0.7f, hy - r * 0.18f, -r * 0.5f, hy - r * 0.12f, 1f, 0.4f) }
         s.oval(-r * 0.92f, hy + 1, 3.2f, 5f, 1.4f, 0.7f); s.oval(r * 0.92f, hy + 1, 3.2f, 5f, 1.4f, 0.7f)             // ears
 
         // hair -----------------------------------------------------------------
@@ -163,8 +154,15 @@ object Sketches {
             Hair.WISPS -> { s.curve(-r * 0.8f, hy - r * 0.3f, 0f, top - 5f, r * 0.8f, hy - r * 0.3f, 1.5f, 0.6f); s.oval(r * 0.3f, top - 5f, 7f, 5f, 1.6f, 0.7f); s.line(-r * 0.9f, hy - 2, -r * 0.95f, hy + 8, 1.3f, 0.5f) }
             Hair.BALD -> { s.line(-r * 0.95f, hy - 2, -r * 0.9f, hy + 9, 1.8f, 0.7f); s.line(r * 0.95f, hy - 2, r * 0.9f, hy + 9, 1.8f, 0.7f) }
             Hair.TUFT -> { s.curve(-3f, top + 2, 0f, top - 10f, 4f, top + 1, 2f); s.curve(4f, top + 1, 8f, top - 6f, 9f, top + 3, 1.6f, 0.7f) }
+            Hair.BUZZ -> { s.curve(-r * 0.9f, hy - r * 0.2f, 0f, top - 3f, r * 0.9f, hy - r * 0.2f, 1.6f, 0.6f); s.hatch(-r * 0.6f, top + 2, -r * 0.4f, top - 1, 8, r * 0.17f, 0f, 0.4f) }
+            Hair.WAVY -> { s.curve(-r * 0.95f, hy, 0f, top - 11f, r * 0.95f, hy, 2.4f); s.curve(-r * 0.95f, hy, -r * 1.15f, hy + 10f, -r * 0.85f, hy + 14f, 1.8f); s.curve(r * 0.95f, hy, r * 1.15f, hy + 10f, r * 0.85f, hy + 14f, 1.8f)
+                s.curve(-r * 0.6f, top + 3, -r * 0.3f, top - 2f, 0f, top + 3, 1.2f, 0.6f); s.curve(0f, top + 3, r * 0.3f, top - 2f, r * 0.6f, top + 3, 1.2f, 0.6f) }
+            Hair.BOB -> { s.curve(-r * 0.95f, hy - 2, 0f, top - 10f, r * 0.95f, hy - 2, 2.6f); s.line(-r * 0.95f, hy - 2, -r * 1.05f, hy + r * 0.7f, 2.2f); s.line(r * 0.95f, hy - 2, r * 1.05f, hy + r * 0.7f, 2.2f); s.line(-r * 0.95f, hy - r * 0.4f, -r * 0.2f, top + 1, 1.2f, 0.6f) }
+            Hair.TOPKNOT -> { s.curve(-r * 0.9f, hy - r * 0.15f, 0f, top - 6f, r * 0.9f, hy - r * 0.15f, 2.2f); s.oval(0f, top - 9f, 5f, 5f, 2f); s.line(-3f, top - 4f, 3f, top - 4f, 1.3f) }
+            Hair.BALD_SIDES -> { s.curve(-r * 0.95f, hy - 3, -r * 1.05f, hy + 7f, -r * 0.8f, hy + 11f, 1.8f, 0.8f); s.curve(r * 0.95f, hy - 3, r * 1.05f, hy + 7f, r * 0.8f, hy + 11f, 1.8f, 0.8f); s.curve(-r * 0.4f, top + 4, 0f, top + 1f, r * 0.4f, top + 4, 1.1f, 0.4f) }
             Hair.CAP -> { s.curve(-r * 1.0f, hy - r * 0.25f, 0f, top - 12f, r * 1.0f, hy - r * 0.25f, 2.8f); s.line(-r * 1.0f, hy - r * 0.25f, r * 1.5f, hy - r * 0.3f, 2.4f); s.hatch(-r * 0.6f, top - 2, -r * 0.2f, top - 6, 5, r * 0.3f, 0f, 0.4f) }
         }
+        if (acc.bow) { s.oval(-r * 0.45f, top + 1, 5f, 3.4f, 1.8f); s.oval(-r * 0.15f, top + 1, 5f, 3.4f, 1.8f); s.dot(-r * 0.3f, top + 1, 1.7f) }
         return s.pens
     }
 }
