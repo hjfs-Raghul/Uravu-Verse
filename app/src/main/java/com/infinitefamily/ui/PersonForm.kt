@@ -127,11 +127,16 @@ fun PersonFormFields(draft: PersonDraft, vm: FamilyViewModel, minimal: Boolean, 
 private fun StickerChooser(draft: PersonDraft, genDelta: Int) {
     val temp = draft.toPerson(null)
     val auto = StickerCategory.choose(temp.copy(stickerCategory = null), LocalDate.now(), genDelta)
-    val current = StickerCategory.byId(draft.stickerCategory) ?: auto
+    val female = temp.gender == Gender.FEMALE
+    val current = StickerCategory.byId(draft.stickerCategory, female) ?: auto
+    var otherGender by remember { mutableStateOf(current.female != female) }
     Text("Drawing", style = MaterialTheme.typography.labelMedium)
     FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         FilterChip(draft.stickerCategory == null, { draft.stickerCategory = null }, { Text("Automatic (${auto.label})") })
-        StickerCategory.values().forEach { c -> FilterChip(draft.stickerCategory == c.id, { draft.stickerCategory = c.id }, { Text(c.label) }) }
+        StickerCategory.forGender(if (otherGender) !female else female).forEach { c ->
+            FilterChip(draft.stickerCategory == c.id, { draft.stickerCategory = c.id }, { Text(c.label) })
+        }
+        FilterChip(otherGender, { otherGender = !otherGender }, { Text(if (female) "Show male drawings" else "Show female drawings") })
     }
     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         for (v in 0 until current.variants) {

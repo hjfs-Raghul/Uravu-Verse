@@ -5,6 +5,8 @@ package com.infinitefamily.ui
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -82,6 +84,8 @@ fun MainScreen(vm: FamilyViewModel) {
 
     BackHandler(enabled = showSearch || pathIds.isNotEmpty()) { if (showSearch) showSearch = false else pathIds = emptyList() }
 
+    var legendOpen by remember { mutableStateOf(false) }
+    BackHandler(enabled = legendOpen) { legendOpen = false }
     Box(Modifier.fillMaxSize().background(Pencil.Paper)) {
         TreeCanvas(
             controller, data, layout, scene, photos, selectedId, pulseId, pathIds,
@@ -99,7 +103,11 @@ fun MainScreen(vm: FamilyViewModel) {
         }
 
         // Bottom controls
-        Column(Modifier.align(Alignment.BottomStart).navigationBarsPadding().padding(10.dp)) { Legend() }
+        if (legendOpen) {
+            // Invisible scrim: a tap anywhere outside the legend closes it.
+            Box(Modifier.fillMaxSize().pointerInput(Unit) { detectTapGestures { legendOpen = false } })
+        }
+        Column(Modifier.align(Alignment.BottomStart).navigationBarsPadding().padding(10.dp)) { Legend(legendOpen, { legendOpen = !legendOpen }) }
         Column(Modifier.align(Alignment.BottomEnd).navigationBarsPadding().padding(10.dp), horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(6.dp)) {
             if (pathIds.isNotEmpty()) PillButton("Clear path") { pathIds = emptyList() }
             PillButton("Fit tree") { scope.launch { controller.fit(layout.bounds) } }

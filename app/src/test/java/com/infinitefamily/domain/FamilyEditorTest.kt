@@ -182,12 +182,26 @@ class FamilyEditorTest {
 
     @Test fun sticker_categories_follow_age_gender_and_generation() {
         val today = java.time.LocalDate.of(2026, 1, 1)
-        val boy = p("Boy", dob = "2018")
-        assertEquals(StickerCategory.BOY, StickerCategory.choose(boy, today, 1))
-        assertEquals(StickerCategory.INFANT, StickerCategory.choose(p("Baby", dob = "2025-06-01"), today, 2))
-        assertEquals(StickerCategory.ELDER_WOMAN, StickerCategory.choose(p("Gran", Gender.FEMALE), today, -2))
-        assertEquals(StickerCategory.ELDER_MAN, StickerCategory.choose(p("Gran").copy(stickerCategory = "elder_man"), today, 1))
-        assertTrue(StickerCategory.BOY.variants >= 4 && StickerCategory.GIRL.variants >= 4)
+        assertEquals(StickerCategory.KID_M, StickerCategory.choose(p("Boy", dob = "2018"), today, 1))
+        assertEquals(StickerCategory.BOY, StickerCategory.choose(p("Boy", dob = "2014"), today, 1))
+        assertEquals(StickerCategory.TEEN_F, StickerCategory.choose(p("T", Gender.FEMALE, dob = "2009"), today, 0))
+        assertEquals(StickerCategory.BABY_M, StickerCategory.choose(p("Baby", dob = "2025-06-01"), today, 2))
+        assertEquals(StickerCategory.OLD_F, StickerCategory.choose(p("Gran", Gender.FEMALE), today, -2))
+        assertEquals(StickerCategory.SENIOR_M, StickerCategory.choose(p("Dad"), today, -1))
+        // saved ids from older versions still resolve; an explicit choice wins over age and generation
+        assertEquals(StickerCategory.OLD_M, StickerCategory.choose(p("Gran").copy(stickerCategory = "elder_man"), today, 1))
+        assertEquals(StickerCategory.BABY_F, StickerCategory.byId("infant", female = true))
+    }
+
+    @Test fun every_category_has_at_least_ten_distinct_drawings() {
+        assertEquals(16, StickerCategory.values().size)
+        for (c in StickerCategory.values()) {
+            val looks = StickerLooks.forCategory(c)
+            assertEquals(c.id, STICKER_VARIANTS, looks.size)
+            assertTrue("${c.id} has ${looks.toSet().size} distinct looks", looks.toSet().size >= 10)
+        }
+        assertEquals(8, StickerCategory.forGender(true).size)
+        assertEquals(8, StickerCategory.forGender(false).size)
     }
 
     @Test fun sibling_boys_get_different_default_sticker_variants() {
@@ -195,5 +209,21 @@ class FamilyEditorTest {
         val ids = (1..4).map { b.m("Boy$it") }
         assertEquals(4, ids.map { b.data.persons.getValue(it).stickerVariant }.toSet().size)
         assertNotNull(a); assertNotNull(w)
+    }
+
+    @Test fun term_builder_codes_and_suggestions() {
+        assertEquals("FeZ", TermSuggestions.buildCode(listOf(CodeStep('F'), CodeStep('Z', age = 'e'))))
+        assertEquals("sM", TermSuggestions.buildCode(listOf(CodeStep('M', bond = 's'))))
+        assertEquals("FeBS~y", TermSuggestions.buildCode(listOf(CodeStep('F'), CodeStep('B', age = 'e'), CodeStep('S')), 'y'))
+        assertEquals("FS", TermSuggestions.buildCode(listOf(CodeStep('F'), CodeStep('S', age = 'e'))))
+        // every code produced by the builder has a readable English name
+        assertEquals("Father's elder sister", EnglishNamer.describe("FeZ"))
+
+        val b = FB(); val me = b.m("Me"); val dad = b.m("Dad"); b.parent(dad, me)
+        val data = b.data.copy(rootId = me)
+        val none = TermSuggestions.fromFamily(RelationshipEngine(data), Terminology())
+        assertTrue(none.none { it.code == "F" })      // plain father is fully configured
+        val custom = Terminology(overrides = listOf(TermOverride("sF", Language.TA, "x"), TermOverride("sF", Language.ML, "y")))
+        assertTrue(TermSuggestions.fromFamily(RelationshipEngine(data), custom).none { it.code == "sF" })
     }
 }
