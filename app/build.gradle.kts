@@ -17,6 +17,14 @@ android {
         versionName = "1.0.0"
     }
 
+    // A fixed debug key, so every APK built on GitHub is signed the same way and can be installed over
+    // the previous one without losing data. (Debug key only: not for publishing to a store.)
+    signingConfigs {
+        getByName("debug") {
+            storeFile = file("uravu-debug.keystore")
+            storePassword = "android"; keyAlias = "uravudebug"; keyPassword = "android"
+        }
+    }
     buildTypes {
         release {
             isMinifyEnabled = false

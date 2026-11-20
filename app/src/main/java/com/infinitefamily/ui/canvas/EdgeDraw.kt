@@ -68,16 +68,35 @@ object EdgeDraw {
         }
 
         // Parent -> children buses
-        val lanes = HashMap<String, Int>()
+        // Families whose horizontal bars would touch or overlap get their own height ("lane"), so each
+        // family keeps a clearly separate bar instead of merging into one.
+        val extents = HashMap<ChildGroup, FloatArray>()
+        for (g in scene.groups) {
+            val parents = g.parentIds.mapNotNull { pos[it] }
+            val kids = g.childIds.mapNotNull { pos[it] }
+            if (parents.isEmpty() || kids.isEmpty()) continue
+            val sx = g.marriageId?.let { anchors[it] }?.x ?: parents.map { it.x }.average().toFloat()
+            val xs = kids.map { it.x } + sx
+            extents[g] = floatArrayOf(xs.min(), xs.max(), kids.minOf { it.y })
+        }
+        val laneOf = HashMap<ChildGroup, Int>()
+        val laneEnds = HashMap<Float, MutableList<Float>>() // child row y -> right end of each lane
+        for (g in extents.keys.sortedBy { extents.getValue(it)[0] }) {
+            val e = extents.getValue(g)
+            val ends = laneEnds.getOrPut(e[2]) { mutableListOf() }
+            var lane = ends.indexOfFirst { it + 40f < e[0] }
+            if (lane < 0) { ends += e[1]; lane = ends.size - 1 } else ends[lane] = e[1]
+            laneOf[g] = lane
+        }
         for (g in scene.groups) {
             val parents = g.parentIds.mapNotNull { pos[it] }
             val kids = g.childIds.mapNotNull { pos[it] }
             if (parents.isEmpty() || kids.isEmpty()) continue
             val anchor = g.marriageId?.let { anchors[it] }
-            val lane = lanes.merge(g.parentIds.joinToString(), 0) { o, _ -> o + 1 } ?: 0
+            val lane = laneOf[g] ?: 0
             val start = anchor ?: Offset(parents.map { it.x }.average().toFloat(), parents.maxOf { it.y } + HH)
             val childTop = kids.minOf { it.y } - HH
-            val busY = (start.y + (childTop - start.y) * 0.5f + lane * 16f).coerceAtMost(childTop - 14f)
+            val busY = (start.y + (childTop - start.y) * 0.5f + lane * 18f).coerceAtMost(childTop - 14f)
             val minX = (kids.map { it.x } + start.x).min(); val maxX = (kids.map { it.x } + start.x).max()
             if (!visible(minX - HW, start.y - 20f, maxX + HW, kids.maxOf { it.y } + HH)) continue
             val color: Color; val width = 3.4f; val effect: PathEffect?

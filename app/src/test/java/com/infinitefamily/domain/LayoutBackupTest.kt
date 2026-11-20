@@ -152,4 +152,27 @@ class LayoutBackupTest {
         assertTrue(parsed.warnings.size >= 2)
         assertTrue(parsed.photos.isEmpty())
     }
+
+    @Test fun sibling_groups_stay_together_when_cousins_marry() {
+        val b = FB()
+        val rajan = b.m("Rajan"); val thanga = b.f("Thanga"); b.marry(rajan, thanga)
+        val mani = b.m("Mani"); val latha = b.f("Latha"); val hari = b.m("Hari")
+        b.kids(rajan, thanga, mani, latha, hari)
+        val devi = b.f("Devi"); b.marry(mani, devi)
+        val vij = b.f("Vij"); b.marry(hari, vij)
+        val arum = b.m("Arum"); b.marry(arum, latha)
+        val swathi = b.f("Swathi"); val sajitha = b.f("Sajitha"); val sow = b.f("Sow")
+        b.kids(mani, devi, swathi, sajitha, sow)
+        val aravind = b.m("Aravind"); val akshay = b.m("Akshay"); b.kids(hari, vij, aravind, akshay)
+        val raghul = b.person("Raghul", Gender.MALE, root = true); val ranjith = b.m("Ranjith"); val rajesh = b.m("Rajesh")
+        b.kids(arum, latha, raghul, ranjith, rajesh)
+        b.marry(raghul, sow)
+        val pos = TreeLayout.compute(b.data).positions
+        fun x(id: String) = pos.getValue(id).x
+        val hariKids = listOf(aravind, akshay).map { x(it) }
+        val arumKids = listOf(raghul, ranjith, rajesh).map { x(it) }
+        // no child of one family sits between the children of another
+        assertTrue(arumKids.none { it > hariKids.min() && it < hariKids.max() })
+        assertTrue(hariKids.none { it > arumKids.min() && it < arumKids.max() })
+    }
 }
