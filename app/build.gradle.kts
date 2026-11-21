@@ -13,8 +13,10 @@ android {
         applicationId = "com.infinitefamily.tree"
         minSdk = 24
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0.0"
+        // GitHub numbers every run, so each build is newer than the last and installs over it.
+        val run = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 1
+        versionCode = run
+        versionName = "1.0.$run"
     }
 
     // A fixed debug key, so every APK built on GitHub is signed the same way and can be installed over

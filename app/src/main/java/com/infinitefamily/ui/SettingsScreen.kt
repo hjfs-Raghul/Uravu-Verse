@@ -109,7 +109,9 @@ fun SettingsScreen(vm: FamilyViewModel, onOpenTerminology: () -> Unit, onClose: 
                     }
 
                     SectionTitle("About")
-                    Text("Uravu Verse 1.0 – an offline family tree and relationship guide. All data stays on this device.")
+                    Text("Uravu Verse – an offline family tree and relationship guide. All data stays on this device.")
+                    val build = remember { runCatching { ctx.packageManager.getPackageInfo(ctx.packageName, 0).versionName }.getOrNull() ?: "?" }
+                    Muted("Build $build")
                     Spacer(Modifier.height(40.dp))
                 }
             }
