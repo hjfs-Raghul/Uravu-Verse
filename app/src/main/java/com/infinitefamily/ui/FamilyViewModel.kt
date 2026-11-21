@@ -85,6 +85,18 @@ class FamilyViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** Remembers where a person was dragged to on the sheet. */
+    fun moveNode(id: String, x: Float, y: Float) {
+        viewModelScope.launch {
+            val m = LinkedHashMap(ManualLayout.decode(repo.settings.value[ManualLayout.KEY]))
+            m[id] = x to y
+            repo.setSetting(ManualLayout.KEY, ManualLayout.encode(m))
+        }
+    }
+
+    /** Forgets all dragged positions and goes back to the automatic arrangement. */
+    fun resetLayout() { viewModelScope.launch { repo.setSetting(ManualLayout.KEY, "") } }
+
     fun setHomeCity(city: String) { viewModelScope.launch { repo.setSetting(SettingKeys.HOME_CITY, city.trim()) } }
 
     fun setOverride(code: String, lang: Language, text: String) { viewModelScope.launch { repo.setOverride(TermOverride(code, lang, text.trim())) } }

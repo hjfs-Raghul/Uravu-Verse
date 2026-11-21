@@ -219,8 +219,12 @@ class RelationshipEngineTest {
     @Test fun unmapped_relations_are_not_invented() {
         val f = Family()
         val t = Terminology().resolve("FFFF")
-        assertTrue(t.ta.isEmpty() && t.ml.isEmpty())
+        // no own term: it is only ever built from existing terms, and is clearly marked as built
+        assertTrue(t.ta.isEmpty() || (t.taComposed && t.ta.all { it.note!!.startsWith("Built from") }))
         assertEquals("Paternal great-great-grandfather", t.relationEn)
+        // a single link with no term at all stays empty rather than being guessed
+        val x = Terminology().resolve("X")
+        assertTrue(x.ta.isEmpty() && x.ml.isEmpty() && !x.taComposed)
         assertTrue(fam.engine.relation(f.raghul, f.raghul).isSelf)
     }
 
@@ -234,5 +238,33 @@ class RelationshipEngineTest {
     @Test fun step_by_step_path_text() {
         val r = fam.engine.relation(fam.raghul, fam.periyappa).primary!!
         assertEquals(listOf("Raghul's father is Appaji", "Appaji's elder brother is Periyappa"), r.stepTexts)
+    }
+
+    @Test fun relations_without_a_term_are_built_from_the_largest_parts() {
+        val term = Terminology()
+        val r = term.resolve("MeBSS")
+        assertEquals("Mother's brother's son's son", EnglishNamer.describe("MBSS"))
+        // Tamil and Malayalam are built from "mother's brother's son" + "son"
+        assertTrue(r.taComposed && r.mlComposed)
+        assertTrue(r.ta.any { it.text == "மச்சானோட மகன்" })
+        assertTrue(r.ta.all { it.note!!.startsWith("Built from: ") })
+        assertTrue(r.ml.any { it.text == "അമ്മാവന്റെ മകന്റെ മകൻ" })
+        assertEquals("Cousin's son", r.addressEn)
+        // a code that has its own term is not composed
+        assertFalse(term.resolve("MB").taComposed)
+        // family override on a part is respected
+        val ov = Terminology(overrides = listOf(TermOverride("MBS", Language.TA, "Machinan")))
+        assertTrue(ov.resolve("MBSS").ta.any { it.text == "Machinanவோட மகன்" })
+    }
+
+    @Test fun genitive_endings() {
+        assertEquals("மச்சானோட", Genitive.apply(Language.TA, "மச்சான்", false))
+        assertEquals("அம்மாவோட", Genitive.apply(Language.TA, "அம்மா", false))
+        assertEquals("அத்தையோட", Genitive.apply(Language.TA, "அத்தை", false))
+        assertEquals("Machanoda", Genitive.apply(Language.TA, "மச்சான்", true, "Machan"))
+        assertEquals("அമ്മാവന്റെ".replace("அ", "അ"), Genitive.apply(Language.ML, "അമ്മാവൻ", false))
+        assertEquals("അമ്മയുടെ", Genitive.apply(Language.ML, "അമ്മ", false))
+        assertEquals("മകളുടെ", Genitive.apply(Language.ML, "മകൾ", false))
+        assertEquals("Ammavante", Genitive.apply(Language.ML, "അമ്മാവൻ", true, "Ammavan"))
     }
 }

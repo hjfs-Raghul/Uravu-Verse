@@ -3,7 +3,10 @@ package com.infinitefamily.ui.canvas
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.*
@@ -40,6 +43,7 @@ fun TreeCanvas(
     pulseId: String?,
     pathIds: List<String>,
     onTap: (String?) -> Unit,
+    onMove: (String, Float, Float) -> Unit = { _, _, _ -> },
     modifier: Modifier = Modifier,
 ) {
     val density = LocalDensity.current.density
@@ -50,6 +54,23 @@ fun TreeCanvas(
     val generations = remember(data) { Generations.compute(data) }
     val currentLayout by rememberUpdatedState(layout)
     val currentData by rememberUpdatedState(data)
+    val currentOnMove by rememberUpdatedState(onMove)
+    val haptics = LocalHapticFeedback.current
+    // A person being dragged is drawn at the finger; the new position is saved when the finger lifts.
+    var dragId by remember { mutableStateOf<String?>(null) }
+    var dragWorld by remember { mutableStateOf(Offset.Zero) }
+    // After the finger lifts, the dropped position is kept until the saved layout arrives (no flicker back).
+    var dropped by remember(layout) { mutableStateOf<Pair<String, Offset>?>(null) }
+    val positions = remember(layout, dragId, dragWorld, dropped) {
+        val base = layout.positions
+        val id = dragId
+        val held = if (id != null) id to dragWorld else dropped
+        if (held == null || held.first !in base) base else base + (held.first to base.getValue(held.first).copy(x = held.second.x, y = held.second.y))
+    }
+    fun hitAt(w: Offset): NodePos? = currentLayout.positions.values.minByOrNull { n ->
+        val dx = kotlin.math.abs(n.x - w.x); val dy = kotlin.math.abs(n.y - w.y)
+        if (dx <= StickerGeometry.W / 2 + 4 && dy <= StickerGeometry.H / 2 + 4) dx + dy else Float.MAX_VALUE
+    }?.takeIf { kotlin.math.abs(it.x - w.x) <= StickerGeometry.W / 2 + 4 && kotlin.math.abs(it.y - w.y) <= StickerGeometry.H / 2 + 4 }
 
     // The pulse only animates while a search result is being highlighted (no idle redraws).
     val pulse = if (pulseId != null) {
@@ -67,16 +88,28 @@ fun TreeCanvas(
             }
             .pointerInput(Unit) {
                 // A tap only fires when the finger did not move, so panning never selects by accident.
-                detectTapGestures { p ->
-                    val w = controller.screenToWorld(p)
-                    val hit = currentLayout.positions.values.minByOrNull { n ->
-                        val dx = kotlin.math.abs(n.x - w.x); val dy = kotlin.math.abs(n.y - w.y)
-                        if (dx <= StickerGeometry.W / 2 + 4 && dy <= StickerGeometry.H / 2 + 4) dx + dy else Float.MAX_VALUE
-                    }?.takeIf {
-                        kotlin.math.abs(it.x - w.x) <= StickerGeometry.W / 2 + 4 && kotlin.math.abs(it.y - w.y) <= StickerGeometry.H / 2 + 4
-                    }
-                    onTap(hit?.id)
-                }
+                detectTapGestures { p -> onTap(hitAt(controller.screenToWorld(p))?.id) }
+            }
+            .pointerInput(Unit) {
+                // Press and hold a sticker, then drag it anywhere. Declared last so it takes the gesture
+                // before the pan / zoom handler once the long press has started.
+                detectDragGesturesAfterLongPress(
+                    onDragStart = { p ->
+                        val hit = hitAt(controller.screenToWorld(p))
+                        if (hit != null) {
+                            dragId = hit.id; dragWorld = Offset(hit.x, hit.y)
+                            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                        }
+                    },
+                    onDrag = { change, amount ->
+                        if (dragId != null) {
+                            change.consume()
+                            dragWorld += amount / (controller.scale * controller.density)
+                        }
+                    },
+                    onDragEnd = { dragId?.let { dropped = it to dragWorld; currentOnMove(it, dragWorld.x, dragWorld.y) }; dragId = null },
+                    onDragCancel = { dragId = null },
+                )
             },
     ) {
         val s = controller.scale
@@ -89,15 +122,15 @@ fun TreeCanvas(
         val boost = (Math.round((0.45f / s).coerceIn(1f, 2.4f) * 5f) / 5f)
 
         withTransform({ translate(off.x, off.y); scale(k, k, Offset.Zero) }) {
-            edges(scene, layout.positions, minWidth = 1.6f / k, visible = visible)
+            edges(scene, positions, minWidth = 1.6f / k, visible = visible)
 
             if (pathIds.size > 1) {
                 val path = Path()
-                pathIds.mapNotNull { layout.positions[it] }.forEachIndexed { i, n -> if (i == 0) path.moveTo(n.x, n.y) else path.lineTo(n.x, n.y) }
+                pathIds.mapNotNull { positions[it] }.forEachIndexed { i, n -> if (i == 0) path.moveTo(n.x, n.y) else path.lineTo(n.x, n.y) }
                 drawPath(path, Pencil.Red.copy(alpha = 0.28f), style = Stroke(max(16f, 3f / k), cap = StrokeCap.Round, join = androidx.compose.ui.graphics.StrokeJoin.Round))
             }
 
-            for (n in layout.positions.values) {
+            for (n in positions.values) {
                 if (!visible(n.x - 90f, n.y - 110f, n.x + 90f, n.y + 110f)) continue
                 val p = data.persons[n.id] ?: continue
                 val cat = StickerCategory.choose(p, today, generations[p.id] ?: 0)

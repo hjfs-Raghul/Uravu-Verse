@@ -24,3 +24,7 @@ Locally (needs JDK 17 + Android SDK): `./gradlew :app:testDebugUnitTest :app:ass
 * **Birth order**: each person has an optional `birthOrder` among all siblings (full and half). Drag-and-drop permutes the existing order slots so relative position to half-siblings is preserved. Explicit order beats dates of birth, which beat the "older/younger than Raghul" hint.
 * **Backup**: ZIP with `manifest.json` (format + `backupVersion`), `data.json`, `photos/`. Validated (versions, references, cycles, unsafe names) before anything is replaced.
 * **Alerts** are off by default; see the in-app explanation of the Android background-location limits.
+
+## Free arrangement and composed terms
+* **Arrange freely:** press and hold a sticker, then drag it anywhere. Positions are saved (and included in backups); **Reset layout** returns to the automatic arrangement. See `domain/ManualLayout.kt`.
+* **Relations without a term** are split into the fewest, largest parts that each have a term (e.g. mother's brother's son + son) and joined (`Terminology.compose`, `Genitive`). Composed terms are marked "Built from: ..." and still show up as suggestions under Add new term.

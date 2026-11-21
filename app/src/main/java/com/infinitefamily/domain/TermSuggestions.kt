@@ -45,8 +45,8 @@ object TermSuggestions {
                 val code = reading.code
                 if (code.isEmpty() || code in found) continue
                 val t = terminology.resolve(code)
-                val noTa = t.ta.isEmpty() || t.taApproximate
-                val noMl = t.ml.isEmpty() || t.mlApproximate
+                val noTa = t.ta.isEmpty() || t.taApproximate || t.taComposed
+                val noMl = t.ml.isEmpty() || t.mlApproximate || t.mlComposed
                 if (noTa || noMl) found[code] = TermSuggestion(code, t.relationEn, p.name, noTa, noMl)
             }
         }
