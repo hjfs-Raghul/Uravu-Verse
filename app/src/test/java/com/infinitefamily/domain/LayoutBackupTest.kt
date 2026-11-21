@@ -175,4 +175,20 @@ class LayoutBackupTest {
         assertTrue(arumKids.none { it > hariKids.min() && it < hariKids.max() })
         assertTrue(hariKids.none { it > arumKids.min() && it < arumKids.max() })
     }
+
+    @Test fun manual_positions_override_the_automatic_layout_and_reset() {
+        val b = FB(); val a = b.person("A", Gender.MALE, root = true); val c = b.m("C"); b.parent(a, c)
+        val auto = TreeLayout.compute(b.data)
+        val raw = ManualLayout.encode(mapOf(c to (123.4f to -56.7f), "ghost" to (1f to 2f)))
+        val manual = ManualLayout.decode(raw)
+        val moved = ManualLayout.apply(auto, manual)
+        assertEquals(123.4f, moved.positions.getValue(c).x, 0.01f)
+        assertEquals(-56.7f, moved.positions.getValue(c).y, 0.01f)
+        assertEquals(auto.positions.getValue(a).x, moved.positions.getValue(a).x, 0.01f)
+        assertFalse("ghost" in moved.positions)
+        assertEquals(1, ManualLayout.count(auto, manual))
+        // reset = empty setting; garbage is ignored
+        assertEquals(auto.positions, ManualLayout.apply(auto, ManualLayout.decode("")).positions)
+        assertTrue(ManualLayout.decode("x:notanumber;;y").isEmpty())
+    }
 }

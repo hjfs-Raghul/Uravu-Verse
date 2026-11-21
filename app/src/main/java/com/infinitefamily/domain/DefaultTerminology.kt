@@ -28,8 +28,8 @@ object DefaultTerminology {
         // Parents and children
         e("F", "Father", "Dad / Father", listOf(t("அப்பா", "Appa")), listOf(t("അച്ഛൻ", "Achan"), t("അപ്പൻ", "Appan", "Used in some communities")))
         e("M", "Mother", "Mom / Mother", listOf(t("அம்மா", "Amma")), listOf(t("അമ്മ", "Amma")))
-        e("S", "Son", "Son", listOf(t("மகன்", "Magan")), listOf(t("മകൻ", "Makan"), t("മോൻ", "Mon", "Affectionate")))
-        e("D", "Daughter", "Daughter", listOf(t("மகள்", "Magal")), listOf(t("മകൾ", "Makal"), t("മോൾ", "Mol", "Affectionate")))
+        e("S", "Son", "Son", listOf(t("மகன்", "Magan"), t("பையன்", "Paiyan", "Colloquial")), listOf(t("മകൻ", "Makan"), t("മോൻ", "Mon", "Affectionate")))
+        e("D", "Daughter", "Daughter", listOf(t("மகள்", "Magal"), t("பொண்ணு", "Ponnu", "Colloquial")), listOf(t("മകൾ", "Makal"), t("മോൾ", "Mol", "Affectionate")))
         // Siblings
         e("eB", "Elder brother", "Elder brother", listOf(t("அண்ணன்", "Annan", "Address: Anna")), listOf(t("ചേട്ടൻ", "Chettan"), t("ഏട്ടൻ", "Ettan")))
         e("yB", "Younger brother", "Younger brother", listOf(t("தம்பி", "Thambi")), listOf(t("അനിയൻ", "Aniyan"), t("അനുജൻ", "Anujan")))

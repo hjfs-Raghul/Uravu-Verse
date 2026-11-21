@@ -35,7 +35,11 @@ fun MainScreen(vm: FamilyViewModel) {
     if (!ready) { Box(Modifier.fillMaxSize(), Alignment.Center) { Text("Opening your family sheet…", style = MaterialTheme.typography.titleMedium) }; return }
 
     val data by vm.data.collectAsState()
-    val layout by vm.layout.collectAsState()
+    val autoLayout by vm.layout.collectAsState()
+    val settings by vm.settings.collectAsState()
+    val manual = remember(settings[ManualLayout.KEY]) { ManualLayout.decode(settings[ManualLayout.KEY]) }
+    val layout = remember(autoLayout, manual) { ManualLayout.apply(autoLayout, manual) }
+    val movedCount = remember(autoLayout, manual) { ManualLayout.count(autoLayout, manual) }
     val scene by vm.scene.collectAsState()
     val engine by vm.engine.collectAsState()
     val scope = rememberCoroutineScope()
@@ -93,6 +97,7 @@ fun MainScreen(vm: FamilyViewModel) {
                 if (id != null) { selectedId = id; sheetFor = id }
                 else { selectedId = null; pulseId = null; pathIds = emptyList() }
             },
+            onMove = { id, x, y -> vm.moveNode(id, x, y) },
         )
 
         // Top controls
@@ -110,13 +115,14 @@ fun MainScreen(vm: FamilyViewModel) {
         Column(Modifier.align(Alignment.BottomStart).navigationBarsPadding().padding(10.dp)) { Legend(legendOpen, { legendOpen = !legendOpen }) }
         Column(Modifier.align(Alignment.BottomEnd).navigationBarsPadding().padding(10.dp), horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(6.dp)) {
             if (pathIds.isNotEmpty()) PillButton("Clear path") { pathIds = emptyList() }
+            if (movedCount > 0) PillButton("Reset layout") { vm.resetLayout(); vm.say("Back to the automatic layout.") }
             PillButton("Fit tree") { scope.launch { controller.fit(layout.bounds) } }
             PillButton("Go to ${data.root?.name ?: "home"}") { data.rootId?.let { goTo(it) } }
             PButton("+  Quick add", { dialog = Dlg.Wizard(selectedId, null) }, filled = true)
         }
 
         if (data.persons.size == 1) {
-            Text("Tap a sticker to add family around it, or use Quick add.\nSettings › Sample family shows a demonstration tree.",
+            Text("Tap a sticker to add family around it, or use Quick add.\nPress and hold a sticker, then drag it to arrange the sheet your way.\nSettings › Sample family shows a demonstration tree.",
                 Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 130.dp, start = 24.dp, end = 24.dp), color = Pencil.Grey,
                 style = MaterialTheme.typography.bodyMedium)
         }
