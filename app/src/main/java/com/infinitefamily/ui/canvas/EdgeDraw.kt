@@ -34,7 +34,10 @@ object EdgeDraw {
         for (m in scene.marriages) {
             val a = pos[m.aId] ?: continue; val b = pos[m.bId] ?: continue
             val (l, r) = if (a.x <= b.x) a to b else b to a
-            val adjacent = abs(r.x - l.x) <= StickerGeometry.W + 60f && abs(r.y - l.y) < 1f
+            // Side by side (any small height difference, e.g. after dragging): a short line between the
+            // stickers. Otherwise a curve from sticker to sticker, so a marriage is never left unlinked.
+            val gap = r.x - l.x - StickerGeometry.W
+            val adjacent = gap >= -2f && gap <= 160f && abs(r.y - l.y) <= 70f
             val color: Color; val width: Float; val effect: PathEffect?
             when (m.status) {
                 MarriageStatus.CURRENT -> { color = Pencil.Red; width = 5.5f; effect = null }
@@ -45,16 +48,15 @@ object EdgeDraw {
             val path = Path()
             val mid: Offset
             if (adjacent) {
-                val y = l.y + 12f
-                val s = Offset(l.x + HW - 2f, y); val e = Offset(r.x - HW + 2f, y)
-                path.pencil(s, e, 1.5f); mid = Offset((s.x + e.x) / 2, y + 0.8f)
+                val s = Offset(l.x + HW - 2f, l.y + 12f); val e = Offset(r.x - HW + 2f, r.y + 12f)
+                path.pencil(s, e, 1.5f); mid = Offset((s.x + e.x) / 2, (s.y + e.y) / 2 + 0.8f)
             } else {
                 val s = Offset(l.x, l.y + HH - 4f); val e = Offset(r.x, r.y + HH - 4f)
-                val depth = 40f + 0.05f * abs(r.x - l.x)
+                val depth = 40f + 0.05f * kotlin.math.hypot(r.x - l.x, r.y - l.y)
                 path.moveTo(s.x, s.y); path.cubicTo(s.x, s.y + depth, e.x, e.y + depth, e.x, e.y)
-                mid = Offset((s.x + e.x) / 2, s.y + depth * 0.75f)
+                mid = Offset((s.x + e.x) / 2, (4f * s.y + 4f * e.y + 6f * depth) / 8f) // exactly on the curve
             }
-            if (visible(l.x - HW, l.y - HH, r.x + HW, r.y + HH + 80f)) {
+            if (visible(l.x - HW, minOf(l.y, r.y) - HH, r.x + HW, maxOf(l.y, r.y) + HH + 120f)) {
                 drawPath(path, color, style = Stroke(w(width), cap = round, pathEffect = effect))
                 if (m.status == MarriageStatus.DIVORCED) { // a small cross-bar on the grey line only
                     drawLine(Pencil.Grey, Offset(mid.x - 7f, mid.y - 9f), Offset(mid.x + 7f, mid.y + 9f), w(2.4f), round)
@@ -98,7 +100,7 @@ object EdgeDraw {
             val childTop = kids.minOf { it.y } - HH
             val busY = (start.y + (childTop - start.y) * 0.5f + lane * 18f).coerceAtMost(childTop - 14f)
             val minX = (kids.map { it.x } + start.x).min(); val maxX = (kids.map { it.x } + start.x).max()
-            if (!visible(minX - HW, start.y - 20f, maxX + HW, kids.maxOf { it.y } + HH)) continue
+            if (!visible(minX - HW, minOf(start.y, kids.minOf { it.y } - HH) - 20f, maxX + HW, maxOf(start.y, kids.maxOf { it.y } + HH))) continue
             val color: Color; val width = 3.4f; val effect: PathEffect?
             when (g.type) {
                 LinkType.ADOPTIVE -> { color = Pencil.Slate; effect = dashed }
@@ -116,19 +118,21 @@ object EdgeDraw {
             drawPath(p, color, style = st)
         }
 
-        // Half siblings: wavy link above the stickers
+        // Half siblings: wavy link above the stickers (follows the stickers wherever they are dragged)
         for (h in scene.halfLinks) {
             val a = pos[h.aId] ?: continue; val b = pos[h.bId] ?: continue
             val (l, r) = if (a.x <= b.x) a to b else b to a
-            if (!visible(l.x - HW, l.y - HH - 40f, r.x + HW, l.y)) continue
-            val path = Path()
-            val y0 = l.y - HH - 6f
-            path.moveTo(l.x, y0 + 6f)
-            val span = r.x - l.x; val n = max(4, (abs(span) / 40f).toInt())
-            val seg = span / n
+            if (!visible(l.x - HW, minOf(l.y, r.y) - HH - 40f, r.x + HW, maxOf(l.y, r.y))) continue
+            val p0 = Offset(l.x, l.y - HH); val p1 = Offset(r.x, r.y - HH)
+            val dx = p1.x - p0.x; val dy = p1.y - p0.y
+            val len = kotlin.math.hypot(dx, dy).coerceAtLeast(1f)
+            val nx = dy / len; val ny = -dx / len  // unit normal
+            val n = max(4, (len / 40f).toInt())
+            val path = Path().apply { moveTo(p0.x, p0.y) }
             for (i in 0 until n) {
                 val dir = if (i % 2 == 0) -1f else 1f
-                path.quadraticBezierTo(l.x + seg * (i + 0.5f), y0 - 16f * dir - 8f, l.x + seg * (i + 1), y0 + 6f)
+                val cx = p0.x + dx * (i + 0.5f) / n + nx * 14f * dir; val cy = p0.y + dy * (i + 0.5f) / n + ny * 14f * dir
+                path.quadraticBezierTo(cx, cy, p0.x + dx * (i + 1) / n, p0.y + dy * (i + 1) / n)
             }
             drawPath(path, Pencil.Grey, style = Stroke(w(2.8f), cap = round))
         }
@@ -136,7 +140,7 @@ object EdgeDraw {
         // Step-parent links: dotted curve from the step-parent to the child
         for (s in scene.stepLinks) {
             val p = pos[s.parentId] ?: continue; val c = pos[s.childId] ?: continue
-            if (!visible(minOf(p.x, c.x) - HW, p.y, maxOf(p.x, c.x) + HW, c.y)) continue
+            if (!visible(minOf(p.x, c.x) - HW, minOf(p.y, c.y) - HH, maxOf(p.x, c.x) + HW, maxOf(p.y, c.y) + HH)) continue
             val path = Path().apply { pencil(Offset(p.x, p.y + HH), Offset(c.x, c.y - HH), 0f) }
             drawPath(path, Pencil.Olive, style = Stroke(w(3f), cap = round, pathEffect = dotted))
         }
